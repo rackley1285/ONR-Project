@@ -107,7 +107,7 @@ G = rd("/workspaces/ONR-Project/testbed/", "karate.graph")
 
 
 # Solve problem
-int_nodes, max_clq_size = solve_clq_int(G, 2)
+int_nodes, max_clq_size = solve_clq_int(G, 5)
 
 # Visualize graphs
 # pos = {
@@ -115,7 +115,7 @@ int_nodes, max_clq_size = solve_clq_int(G, 2)
 #     5: (1 - 1/3, 0.5), 6: (1/3, 0.5), 7: (0.5, 0.5 + 1/6), 8: (0, 0.5 + 1/6), 
 #     9: (1/6, 0.5 - 1/6), 10: (0, 0.5 - 1/6), 11: (1/6, 0.5 + 1/6), 12: (0.5, 0.5 - 1/6)
 # }
-pos = nx.spring_layout(G, seed=42)
+pos = nx.spring_layout(G, seed=10)
 plt.figure()
 nx.draw_networkx(G, pos, with_labels=True, node_color="#9EC3E2")
 plt.savefig("pre-graph.png")
