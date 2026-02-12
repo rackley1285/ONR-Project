@@ -2,14 +2,16 @@ import networkx as nx
 import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
+import algorithms as a
 
 # Callback class
 #--------------------------------------------------------------------------------
 class CIPCallback:
-    def __init__(self, z, theta, cliques):
+    def __init__(self, z, theta, graph):
         self.z = z
         self.theta = theta
-        self.kappa = cliques
+        self.G = graph
+        self.kappa = list(nx.find_cliques(self.G))
 
     def __call__(self, model, where):
         if where == GRB.Callback.MIPSOL:
@@ -21,30 +23,33 @@ class CIPCallback:
     def restrict_clique(self, model):
         theta = model.cbGetSolution(self.theta)
         z = model.cbGetSolution(self.z)
-
-        for K in self.kappa:
-            if theta + sum(z[i] for i in K) < len(K):
-                model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in K) >= len(K))
-                break
+        G_int = self.G.subgraph([v for v in self.G if model.cbGetSolution(self.z[v]) < 0.5])
+        max_clique = nx.max_weight_clique(G_int, weight=None)
+        
+        if theta + sum(z[i] for i in max_clique[0]) < max_clique[1]:
+            model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in max_clique[0]) >= max_clique[1])
+        # for K in self.kappa: #FIX THIS: Find a maximal clique to add a lazy constraint for
+        #     if theta + sum(z[i] for i in K) < len(K):
+        #         model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in K) >= len(K))
+                
 #--------------------------------------------------------------------------------
+
 
 # Solver function
 #--------------------------------------------------------------------------------
-def solve_clq_int(nodes, cliques, budget):
+def solve_clq_int(graph, budget):
     with gp.Env() as env, gp.Model(env=env) as m:
         # Variable definition
         theta = m.addVar(vtype=GRB.INTEGER, name='theta')
-        z = m.addVars(nodes, vtype=GRB.BINARY, name='z')
+        z = m.addVars(graph.nodes, vtype=GRB.BINARY, name='z')
 
         # Constraint definition
-        # for K in cliques:
-        #    m.addConstr(theta + gp.quicksum(z[i] for i in K) >= len(K), name='clq_max')
         m.addConstr(gp.quicksum(z.values()) <= budget, name='budget')
         m.addConstr(theta >= 0, name='theta_lb')
 
         # Optimization
         m.Params.LazyConstraints = 1
-        cb = CIPCallback(z, theta, cliques)
+        cb = CIPCallback(z, theta, graph)
         m.setObjective(theta, GRB.MINIMIZE)
         m.optimize(cb)
 
@@ -52,13 +57,17 @@ def solve_clq_int(nodes, cliques, budget):
         return u_int, m.ObjVal
 #--------------------------------------------------------------------------------
 
+
 # Maximal cliques function
 #--------------------------------------------------------------------------------
-def maximal_clique(graph):
-    pass
+def maximal_clique(graph, p):
+    MD = a.MD_ordering(graph)
+    d = a.degeneracy(graph)
 #--------------------------------------------------------------------------------
 
-# Test graph
+
+# Define test graph
+#--------------------------------------------------------------------------------
 edges = [(0, i + 1) for i in range(4)
     ] + [(1, i) for i in [2, 3]
     ] + [(2, i) for i in [3, 4]
@@ -71,12 +80,10 @@ edges = [(0, i + 1) for i in range(4)
 G = nx.Graph(edges)
 nodes = sorted(list(G.nodes))
 
-# Enumerating maximal cliques (BK algo) 
-    ### REPLACE WITH INTEGER PROGRAM
-kappa = list(nx.find_cliques(G))
-
 # Solve problem
-int_nodes, max_clq_size = solve_clq_int(nodes, kappa, 2)
+int_nodes, max_clq_size = solve_clq_int(G, 2)
+#--------------------------------------------------------------------------------
+
 
 # Visualize graphs
 #--------------------------------------------------------------------------------

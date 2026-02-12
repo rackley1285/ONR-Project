@@ -1,5 +1,8 @@
 import networkx as nx
 
+
+#Create a minimum-degree ordered list
+#--------------------------------------------------------------------------------
 def MD_ordering(graph):
     MD_list = []
     j = 0
@@ -11,8 +14,11 @@ def MD_ordering(graph):
         j += 1
     
     return MD_list
+#--------------------------------------------------------------------------------
 
 
+# Calculate the degeneracy of a graph
+#--------------------------------------------------------------------------------
 def degeneracy(graph):
     L = set()
     deg_list = dict(graph.degree)
@@ -37,15 +43,17 @@ def degeneracy(graph):
         for u in graph.neighbors(v):
             if u in L:
                 continue
-            for i in range(len(D)):
-                if u in D[i]:
-                    D[i].remove(u)
-                    D[i-1].append(u)
-                    break
+            u_deg = deg_list[u]
+            deg_list[u] -= 1
+            D[u_deg].remove(u)
+            D[u_deg - 1].append(u)
         
     return d
-    
+#--------------------------------------------------------------------------------
+ 
 
+#Testing grounds
+#--------------------------------------------------------------------------------
 G = nx.path_graph(4)
 print(MD_ordering(G), degeneracy(G))
 
