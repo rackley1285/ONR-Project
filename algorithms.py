@@ -12,6 +12,19 @@ def MD_ordering(graph):
 
     return MD_list
 
+def degeneracy(graph, MD = None):
+    if MD == None:
+        MD = MD_ordering(graph)
+    
+    D = []
+    for v in MD:
+        Nv = list(graph.neighbors(v))
+        rnbrhd = [n for n in MD[MD.index(v):] if n in Nv]
+        D.append(len(rnbrhd))
+    
+    return max(D)
+    
 
 G = nx.path_graph(4)
-print(MD_ordering(G))
+print(degeneracy(G))
+
