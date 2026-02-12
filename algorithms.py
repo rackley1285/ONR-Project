@@ -54,6 +54,7 @@ def degeneracy(graph):
 
 #Testing grounds
 #--------------------------------------------------------------------------------
-G = nx.path_graph(4)
-print(MD_ordering(G), degeneracy(G))
+if __name__ == "__main__":
+    G = nx.path_graph(4)
+    print(MD_ordering(G), degeneracy(G))
 

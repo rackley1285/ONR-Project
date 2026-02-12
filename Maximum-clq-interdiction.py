@@ -4,6 +4,41 @@ from gurobipy import GRB
 import matplotlib.pyplot as plt
 import algorithms as a
 
+# Read in DIMACS10 file format
+#--------------------------------------------------------------------------------
+def rd(pathname,filename):
+    """Read graph instance in DIMACS clustering challenge format."""
+    print("DIMACS10 Instance:",filename)
+    with open(pathname+filename,'r') as infile:
+        line = infile.readline()
+        vertices = int(line.split()[0])
+        edges = int(line.split()[1])
+        fmt = int(line.split()[2])
+        G = nx.Graph()
+        if fmt==0:
+            print("#Vertices",vertices)
+            print("#Edges",edges)
+            for i in range(vertices):
+                G.add_node(i+1)
+                
+            u = 0;
+            while (u <= vertices):
+                line = infile.readline()
+                if (not line.strip()):
+                    u = u + 1
+#                    print("Vertex", u, " is isolated.")
+                elif (line[0] == '%'): 
+                    print("Skipping comment: ",line)
+                else:
+                    u = u + 1
+                    for word in line.split():
+                        G.add_edge(u,(int(word)))
+        else:
+            print("DIMACS10 weighted graphs need a new reader!")
+    return G
+#--------------------------------------------------------------------------------
+
+
 # Callback class
 #--------------------------------------------------------------------------------
 class CIPCallback:
@@ -66,31 +101,19 @@ def maximal_clique(graph, p):
 #--------------------------------------------------------------------------------
 
 
-# Define test graph
+# Define test graphs
 #--------------------------------------------------------------------------------
-edges = [(0, i + 1) for i in range(4)
-    ] + [(1, i) for i in [2, 3]
-    ] + [(2, i) for i in [3, 4]
-    ] + [(3, 4)
-    ] + [(4, i) for i in [5, 6, 11]
-    ] + [(5, i) for i in [6, 7, 8, 10, 11]
-    ] + [(7, i) for i in [8, 9, 10]
-    ] + [(8, i) for i in [9, 10]
-    ] + [(9, 10)]
-G = nx.Graph(edges)
-nodes = sorted(list(G.nodes))
+G = rd("/workspaces/ONR-Project/testbed/", "CIP_example.graph")
+
 
 # Solve problem
 int_nodes, max_clq_size = solve_clq_int(G, 2)
-#--------------------------------------------------------------------------------
-
 
 # Visualize graphs
-#--------------------------------------------------------------------------------
 pos = {
-    0: (1 - 1/6, 0.5 - 1/6), 1: (1, 0.5 - 1/6), 2: (1, 0.5 + 1/6), 3: (1 - 1/6, 0.5 + 1/6), 
-    4: (1 - 1/3, 0.5), 5: (1/3, 0.5), 6: (0.5, 0.5 + 1/6), 7: (0, 0.5 + 1/6), 
-    8: (1/6, 0.5 - 1/6), 9: (0, 0.5 - 1/6), 10: (1/6, 0.5 + 1/6), 11: (0.5, 0.5 - 1/6)
+    1: (1 - 1/6, 0.5 - 1/6), 2: (1, 0.5 - 1/6), 3: (1, 0.5 + 1/6), 4: (1 - 1/6, 0.5 + 1/6), 
+    5: (1 - 1/3, 0.5), 6: (1/3, 0.5), 7: (0.5, 0.5 + 1/6), 8: (0, 0.5 + 1/6), 
+    9: (1/6, 0.5 - 1/6), 10: (0, 0.5 - 1/6), 11: (1/6, 0.5 + 1/6), 12: (0.5, 0.5 - 1/6)
 }
 plt.figure()
 nx.draw_networkx(G, pos=pos, with_labels=True, node_color="#9EC3E2")
