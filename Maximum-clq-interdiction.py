@@ -103,20 +103,21 @@ def maximal_clique(graph, p):
 
 # Define test graphs
 #--------------------------------------------------------------------------------
-G = rd("/workspaces/ONR-Project/testbed/", "CIP_example.graph")
+G = rd("/workspaces/ONR-Project/testbed/", "karate.graph")
 
 
 # Solve problem
 int_nodes, max_clq_size = solve_clq_int(G, 2)
 
 # Visualize graphs
-pos = {
-    1: (1 - 1/6, 0.5 - 1/6), 2: (1, 0.5 - 1/6), 3: (1, 0.5 + 1/6), 4: (1 - 1/6, 0.5 + 1/6), 
-    5: (1 - 1/3, 0.5), 6: (1/3, 0.5), 7: (0.5, 0.5 + 1/6), 8: (0, 0.5 + 1/6), 
-    9: (1/6, 0.5 - 1/6), 10: (0, 0.5 - 1/6), 11: (1/6, 0.5 + 1/6), 12: (0.5, 0.5 - 1/6)
-}
+# pos = {
+#     1: (1 - 1/6, 0.5 - 1/6), 2: (1, 0.5 - 1/6), 3: (1, 0.5 + 1/6), 4: (1 - 1/6, 0.5 + 1/6), 
+#     5: (1 - 1/3, 0.5), 6: (1/3, 0.5), 7: (0.5, 0.5 + 1/6), 8: (0, 0.5 + 1/6), 
+#     9: (1/6, 0.5 - 1/6), 10: (0, 0.5 - 1/6), 11: (1/6, 0.5 + 1/6), 12: (0.5, 0.5 - 1/6)
+# }
+pos = nx.spring_layout(G, seed=42)
 plt.figure()
-nx.draw_networkx(G, pos=pos, with_labels=True, node_color="#9EC3E2")
+nx.draw_networkx(G, pos, with_labels=True, node_color="#9EC3E2")
 plt.savefig("pre-graph.png")
 plt.close()
 
@@ -124,6 +125,6 @@ G2 = G.copy()
 G2.remove_nodes_from(int_nodes)
 
 plt.figure()
-nx.draw_networkx(G2, pos=pos, with_labels=True, node_color="#9EC3E2")
+nx.draw_networkx(G2, pos, with_labels=True, node_color="#9EC3E2")
 plt.savefig("post-graph.png")
 plt.close()
