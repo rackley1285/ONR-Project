@@ -1,4 +1,5 @@
-import networkx as nx
+import igraph as ig
+ig.config['plotting.backend'] = 'matplotlib'
 import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
@@ -14,14 +15,14 @@ def rd(pathname,filename):
         vertices = int(line.split()[0])
         edges = int(line.split()[1])
         fmt = int(line.split()[2])
-        G = nx.Graph()
+        G = ig.Graph()
         if fmt==0:
             print("#Vertices",vertices)
             print("#Edges",edges)
             for i in range(vertices):
-                G.add_node(i+1)
-                
-            u = 0;
+                G.add_vertex(name = str(i+1))
+            
+            u = 0
             while (u <= vertices):
                 line = infile.readline()
                 if (not line.strip()):
@@ -32,7 +33,7 @@ def rd(pathname,filename):
                 else:
                     u = u + 1
                     for word in line.split():
-                        G.add_edge(u,(int(word)))
+                        G.add_edge(u-1,(int(word)-1))
         else:
             print("DIMACS10 weighted graphs need a new reader!")
     return G
@@ -46,7 +47,7 @@ class CIPCallback:
         self.z = z
         self.theta = theta
         self.G = graph
-        self.kappa = list(nx.find_cliques(self.G))
+        self.kappa = graph.largest_cliques()
 
     def __call__(self, model, where):
         if where == GRB.Callback.MIPSOL:
@@ -58,11 +59,12 @@ class CIPCallback:
     def restrict_clique(self, model):
         theta = model.cbGetSolution(self.theta)
         z = model.cbGetSolution(self.z)
-        G_int = self.G.subgraph([v for v in self.G if model.cbGetSolution(self.z[v]) < 0.5]).copy()
-        max_clique = nx.max_weight_clique(G_int, weight=None)
+        V_bar = [v for v in range(self.G.vcount()) if model.cbGetSolution(self.z[v]) < 0.5]
+        G_int = self.G.induced_subgraph(V_bar)
+        max_clique = G_int.largest_cliques()[0]
         
-        if theta + sum(z[i] for i in max_clique[0]) < max_clique[1]:
-            model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in max_clique[0]) >= max_clique[1])
+        if theta + sum(z[i] for i in max_clique) < len(max_clique):
+            model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in max_clique) >= len(max_clique))
         # for K in self.kappa: #FIX THIS: Find a maximal clique to add a lazy constraint for
         #     if theta + sum(z[i] for i in K) < len(K):
         #         model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in K) >= len(K))
@@ -76,7 +78,7 @@ def solve_clq_int(graph, budget):
     with gp.Env() as env, gp.Model(env=env) as m:
         # Variable definition
         theta = m.addVar(vtype=GRB.INTEGER, name='theta')
-        z = m.addVars(graph.nodes, vtype=GRB.BINARY, name='z')
+        z = m.addVars(range(graph.vcount()), vtype=GRB.BINARY, name='z')
 
         # Constraint definition
         m.addConstr(gp.quicksum(z.values()) <= budget, name='budget')
@@ -95,27 +97,17 @@ def solve_clq_int(graph, budget):
 
 # Define test graphs
 #--------------------------------------------------------------------------------
-G = rd("/workspaces/ONR-Project/testbed/", "netscience.graph")
+G = rd("/workspaces/ONR-Project/testbed/", "netscience.graph").simplify()
 
 # Solve problem
 int_nodes, max_clq_size = solve_clq_int(G, 5)
+V2 = [i for i in range(G.vcount()) if i not in int_nodes]
 
 '''# Visualize graphs
-# pos = {
-#     1: (1 - 1/6, 0.5 - 1/6), 2: (1, 0.5 - 1/6), 3: (1, 0.5 + 1/6), 4: (1 - 1/6, 0.5 + 1/6), 
-#     5: (1 - 1/3, 0.5), 6: (1/3, 0.5), 7: (0.5, 0.5 + 1/6), 8: (0, 0.5 + 1/6), 
-#     9: (1/6, 0.5 - 1/6), 10: (0, 0.5 - 1/6), 11: (1/6, 0.5 + 1/6), 12: (0.5, 0.5 - 1/6)
-# }
-pos = nx.spring_layout(G, seed=10)
-plt.figure()
-nx.draw_networkx(G, pos, with_labels=True, node_color="#9EC3E2")
-plt.savefig("pre-graph.png")
+layout = G.layout(layout="graphopt")
+ig.plot(G, target="pre-graph.png", layout=layout, vertex_label = range(G.vcount()))
 plt.close()
 
-G2 = G.copy()
-G2.remove_nodes_from(int_nodes)
-
-plt.figure()
-nx.draw_networkx(G2, pos, with_labels=True, node_color="#9EC3E2")
-plt.savefig("post-graph.png")
+G2 = G.induced_subgraph(V2)
+ig.plot(G2, target="post-graph.png", layout=ig.Layout([layout[i] for i in V2]), vertex_label = V2)
 plt.close()'''
