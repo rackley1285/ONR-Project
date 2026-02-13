@@ -1,7 +1,7 @@
 import networkx as nx
 
 
-#Create a minimum-degree ordered list
+# Create a minimum-degree ordered list
 #--------------------------------------------------------------------------------
 def MD_ordering(graph):
     MD_list = []
@@ -50,11 +50,34 @@ def degeneracy(graph):
         
     return d
 #--------------------------------------------------------------------------------
- 
 
-#Testing grounds
+# Walteros-Buchanan maximum clique algorithm
+#--------------------------------------------------------------------------------
+def WB_max_clq(graph, p):
+    V = MD_ordering(graph)
+    indices = range(len(V))
+    d = degeneracy(graph)
+    n = len(V)
+
+    D = []
+    D_rns = []
+    for i in indices:
+        r_neighborhood = [V[j] for j in indices[i:] if graph.has_edge(V[i], V[j])]
+        rdeg = len(r_neighborhood)
+        if i < n - d and rdeg >= d - p:
+            D.append(V[i])
+            D_rns.append(r_neighborhood)
+    
+    for v_rn in D_rns:
+        G_bar = graph.subgraph()
+
+#--------------------------------------------------------------------------------
+
+
+# Testing grounds
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
     G = nx.path_graph(4)
     print(MD_ordering(G), degeneracy(G))
+    WB_max_clq(G, 0)
 

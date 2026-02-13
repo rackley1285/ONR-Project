@@ -93,18 +93,9 @@ def solve_clq_int(graph, budget):
 #--------------------------------------------------------------------------------
 
 
-# Maximal cliques function
-#--------------------------------------------------------------------------------
-def maximal_clique(graph, p):
-    MD = a.MD_ordering(graph)
-    d = a.degeneracy(graph)
-#--------------------------------------------------------------------------------
-
-
 # Define test graphs
 #--------------------------------------------------------------------------------
 G = rd("/workspaces/ONR-Project/testbed/", "netscience.graph")
-
 
 # Solve problem
 int_nodes, max_clq_size = solve_clq_int(G, 5)
