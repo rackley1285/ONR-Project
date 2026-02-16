@@ -1,5 +1,6 @@
 import networkx as nx
 import igraph as ig
+import sys, time
 
 # Create a minimum-degree ordered list
 #--------------------------------------------------------------------------------
@@ -74,40 +75,12 @@ def WB_max_clq(graph, p):
 #--------------------------------------------------------------------------------
 
 
-# Find random clique of size q
-#--------------------------------------------------------------------------------
-def find_clique(graph, q):
-    v1 = 0
-    for i in range(graph.vcount()):
-        if graph.degree(i) == q:
-            v1 = i
-            break
-    
-    C = [v1]
-    C_nbrs = [(v1, neighbor) for neighbor in graph.neighborhood(v1)]
-    for v1, neighbor in C_nbrs:
-        if graph.degree(neighbor) >= q and neighbor not in C:
-            C.append(neighbor)
-    
-    i = 1
-    while len(C) > q and i < len(C):
-        for j in range(1, len(C)):
-            if not graph.are_adjacent(C[i], C[j]) and C[i] != C[j]:
-                C.pop(j)
-        i += 1
-    
-    if len(C) < q:
-        return []
-    else:
-        return sorted(C)
-#--------------------------------------------------------------------------------
-
-
 # Read in DIMACS10 file format
 #--------------------------------------------------------------------------------
 def rd(pathname,filename):
     """Read graph instance in DIMACS clustering challenge format."""
     print("DIMACS10 Instance:",filename)
+    start = time.time()
     with open(pathname+filename,'r') as infile:
         line = infile.readline()
         vertices = int(line.split()[0])
@@ -121,6 +94,7 @@ def rd(pathname,filename):
                 G.add_vertex(name = str(i+1))
             
             u = 0
+            edges = []
             while (u <= vertices):
                 line = infile.readline()
                 if (not line.strip()):
@@ -131,9 +105,12 @@ def rd(pathname,filename):
                 else:
                     u = u + 1
                     for word in line.split():
-                        G.add_edge(u-1,(int(word)-1))
+                        if int(word) > u:
+                            edges.append((u-1,(int(word)-1)))
+            G.add_edges(edges)
         else:
             print("DIMACS10 weighted graphs need a new reader!")
+    print(f"Graph read in {time.time() - start:.2f} seconds")
     return G
 #--------------------------------------------------------------------------------
 
@@ -141,7 +118,7 @@ def rd(pathname,filename):
 # Testing grounds
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
-    G = rd("/workspaces/ONR-Project/testbed/", "CIP_example.graph").simplify()
-    print(find_clique(G, 4))
+    G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph").simplify()
+    print(find_clique(G, 2))
     #WB_max_clq(G, 0)
 
