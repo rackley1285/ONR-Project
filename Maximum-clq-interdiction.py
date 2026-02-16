@@ -100,7 +100,7 @@ def solve_clq_int(graph, budget):
 G = rd("/workspaces/ONR-Project/testbed/", "netscience.graph").simplify()
 
 # Solve problem
-int_nodes, max_clq_size = solve_clq_int(G, 5)
+int_nodes, max_clq_size = solve_clq_int(G, 10)
 V2 = [i for i in range(G.vcount()) if i not in int_nodes]
 
 '''# Visualize graphs
