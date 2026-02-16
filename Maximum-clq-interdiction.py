@@ -21,15 +21,16 @@ class CIPCallback:
                 model.terminate()
     
     def restrict_clique(self, model):
-        theta = model.cbGetSolution(self.theta)
-        z = model.cbGetSolution(self.z)
-        V_bar = [v for v in range(self.G.vcount()) if model.cbGetSolution(self.z[v]) < 0.5]
+        theta_hat = model.cbGetSolution(self.theta)
+        z_hat = model.cbGetSolution(self.z)
+        V_bar = [v for v in self.G.vs["name"] if z_hat[v] < 0.5]
+        V_bar = self.G.vs.select(name_in=V_bar).indices
         G_int = self.G.induced_subgraph(V_bar)
         cliques = G_int.maximal_cliques()
         max_clique = max(cliques, key=len)
         
-        if theta + sum(z[i] for i in max_clique) < len(max_clique):
-            model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in max_clique) >= len(max_clique))
+        if theta_hat < len(max_clique):
+            model.cbLazy(self.theta + gp.quicksum(self.z[G_int.vs[i]["name"]] for i in max_clique) >= len(max_clique))
             
 #--------------------------------------------------------------------------------
 
@@ -40,7 +41,7 @@ def solve_clq_int(graph, budget):
     with gp.Env() as env, gp.Model(env=env) as m:
         # Variable definition
         theta = m.addVar(vtype=GRB.INTEGER, name='theta')
-        z = m.addVars(range(graph.vcount()), vtype=GRB.BINARY, name='z')
+        z = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='z')
 
         # Constraint definition
         m.addConstr(gp.quicksum(z.values()) <= budget, name='budget')
@@ -60,18 +61,21 @@ def solve_clq_int(graph, budget):
 # Define test graphs
 #--------------------------------------------------------------------------------
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
-G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph")
+G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"CIP_example.graph")
 
 
 # Solve problem
-int_nodes, max_clq_size = solve_clq_int(G, 100)
-V2 = [i for i in range(G.vcount()) if i not in int_nodes]
+int_nodes, max_clq_size = solve_clq_int(G, 2)
+V2 = G.vs.select(name_notin=int_nodes)
 
-'''# Visualize graphs
+# Visualize graphs
 layout = G.layout(layout="graphopt")
-ig.plot(G, target="pre-graph.png", layout=layout, vertex_label = range(G.vcount()))
+name_layout = {G.vs[i]["name"]: layout.coords[i] for i in G.vs.indices}
+
+
+ig.plot(G, target="pre-graph.png", layout=layout, vertex_label = G.vs["name"])
 plt.close()
 
 G2 = G.induced_subgraph(V2)
-ig.plot(G2, target="post-graph.png", layout=ig.Layout([layout[i] for i in V2]), vertex_label = V2)
-plt.close()'''
+ig.plot(G2, target="post-graph.png", layout=ig.Layout([name_layout[v["name"]] for v in V2]), vertex_label = V2["name"])
+plt.close()

@@ -108,6 +108,7 @@ def rd(pathname,filename):
                         if int(word) > u:
                             edges.append((u-1,(int(word)-1)))
             G.add_edges(edges)
+            G.vs["name"] = range(1, vertices + 1)
         else:
             print("DIMACS10 weighted graphs need a new reader!")
     print(f"Graph read in {time.time() - start:.2f} seconds")
@@ -118,7 +119,6 @@ def rd(pathname,filename):
 # Testing grounds
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
-    G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph").simplify()
-    print(find_clique(G, 2))
-    #WB_max_clq(G, 0)
+    G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph")
+    print(G)
 
