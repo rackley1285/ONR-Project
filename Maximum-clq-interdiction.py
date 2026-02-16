@@ -47,7 +47,6 @@ class CIPCallback:
         self.z = z
         self.theta = theta
         self.G = graph
-        self.kappa = graph.largest_cliques()
 
     def __call__(self, model, where):
         if where == GRB.Callback.MIPSOL:
@@ -65,10 +64,7 @@ class CIPCallback:
         
         if theta + sum(z[i] for i in max_clique) < len(max_clique):
             model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in max_clique) >= len(max_clique))
-        # for K in self.kappa: #FIX THIS: Find a maximal clique to add a lazy constraint for
-        #     if theta + sum(z[i] for i in K) < len(K):
-        #         model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in K) >= len(K))
-                
+            
 #--------------------------------------------------------------------------------
 
 
@@ -97,7 +93,7 @@ def solve_clq_int(graph, budget):
 
 # Define test graphs
 #--------------------------------------------------------------------------------
-G = rd("/workspaces/ONR-Project/testbed/", "netscience.graph").simplify()
+G = rd("/workspaces/ONR-Project/testbed/", "power.graph").simplify()
 
 # Solve problem
 int_nodes, max_clq_size = solve_clq_int(G, 10)
