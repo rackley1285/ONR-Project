@@ -5,41 +5,6 @@ from gurobipy import GRB
 import matplotlib.pyplot as plt
 import algorithms as a
 
-# Read in DIMACS10 file format
-#--------------------------------------------------------------------------------
-def rd(pathname,filename):
-    """Read graph instance in DIMACS clustering challenge format."""
-    print("DIMACS10 Instance:",filename)
-    with open(pathname+filename,'r') as infile:
-        line = infile.readline()
-        vertices = int(line.split()[0])
-        edges = int(line.split()[1])
-        fmt = int(line.split()[2])
-        G = ig.Graph()
-        if fmt==0:
-            print("#Vertices",vertices)
-            print("#Edges",edges)
-            for i in range(vertices):
-                G.add_vertex(name = str(i+1))
-            
-            u = 0
-            while (u <= vertices):
-                line = infile.readline()
-                if (not line.strip()):
-                    u = u + 1
-#                    print("Vertex", u, " is isolated.")
-                elif (line[0] == '%'): 
-                    print("Skipping comment: ",line)
-                else:
-                    u = u + 1
-                    for word in line.split():
-                        G.add_edge(u-1,(int(word)-1))
-        else:
-            print("DIMACS10 weighted graphs need a new reader!")
-    return G
-#--------------------------------------------------------------------------------
-
-
 # Callback class
 #--------------------------------------------------------------------------------
 class CIPCallback:
@@ -60,7 +25,8 @@ class CIPCallback:
         z = model.cbGetSolution(self.z)
         V_bar = [v for v in range(self.G.vcount()) if model.cbGetSolution(self.z[v]) < 0.5]
         G_int = self.G.induced_subgraph(V_bar)
-        max_clique = G_int.largest_cliques()[0]
+        cliques = G_int.maximal_cliques()
+        max_clique = max(cliques, key=len)
         
         if theta + sum(z[i] for i in max_clique) < len(max_clique):
             model.cbLazy(self.theta + gp.quicksum(self.z[i] for i in max_clique) >= len(max_clique))
@@ -93,10 +59,12 @@ def solve_clq_int(graph, budget):
 
 # Define test graphs
 #--------------------------------------------------------------------------------
-G = rd("/workspaces/ONR-Project/testbed/", "power.graph").simplify()
+#G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
+G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph")
+
 
 # Solve problem
-int_nodes, max_clq_size = solve_clq_int(G, 10)
+int_nodes, max_clq_size = solve_clq_int(G, 100)
 V2 = [i for i in range(G.vcount()) if i not in int_nodes]
 
 '''# Visualize graphs
