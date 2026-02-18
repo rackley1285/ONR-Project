@@ -1,4 +1,3 @@
-import networkx as nx
 import igraph as ig
 import sys, time
 
@@ -43,9 +42,19 @@ def rd(pathname,filename):
 #--------------------------------------------------------------------------------
 
 
+# Find random clique of size k, if it exists
+#--------------------------------------------------------------------------------
+def find_clique(graph, k):
+    k_core = graph.k_core(k - 1 if k > 1 else 1)
+    kc_clique = k_core.cliques(min=k, max=k)[0]
+    G_clique = [k_core.vs[i]["name"] for i in kc_clique]
+    return G_clique
+#--------------------------------------------------------------------------------
+
+
 # Testing grounds
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
-    G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph")
-    print(G)
+    G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"CIP_example.graph")
+    print(find_clique(G, 0))
 

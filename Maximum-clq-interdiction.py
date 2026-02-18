@@ -26,7 +26,7 @@ class CIPCallback:
         z_hat = model.cbGetSolution(self.z)
         
         # Creating interdicted subgraph
-        V_bar = [v for v in self.G.vs["name"] if z_hat[v] < 0.5]
+        V_bar = [v for v in self.G.vs["name"] if z_hat[v] < 0.5] #Selects names of non-interdicted vertices
         V_bar = self.G.vs.select(name_in=V_bar) #Selects vertex objects for interdicted graph by name attribute
         G_int = self.G.induced_subgraph(V_bar)
         
@@ -36,7 +36,7 @@ class CIPCallback:
         
         # Adding lazy constraint
         if theta_hat < len(max_clique):
-            model.cbLazy(self.theta + gp.quicksum(self.z[G_int.vs[i]["name"]] for i in max_clique) >= len(max_clique))
+            model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.z[G_int.vs[i]["name"]] for i in max_clique))
             
 #--------------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ class CIPCallback:
 def solve_clq_int(graph, budget):
     with gp.Env() as env, gp.Model(env=env) as m:
         # Variable definition
-        theta = m.addVar(vtype=GRB.INTEGER, name='theta')
+        theta = m.addVar(vtype=GRB.INTEGER, name='theta') #Maximum size of remaining cliques
         z = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='z')
 
         # Constraint definition
@@ -68,7 +68,7 @@ def solve_clq_int(graph, budget):
 # Define test graphs
 #--------------------------------------------------------------------------------
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
-G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"CIP_example.graph")
+G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"cond-mat.graph")
 
 
 # Solve problem
@@ -76,14 +76,14 @@ int_nodes, max_clq_size = solve_clq_int(G, 2)
 V2 = G.vs.select(name_notin=int_nodes) #Selects vertex objects needed for interdicted graph by name attribute
 G2 = G.induced_subgraph(V2)
 
-# Visualize graphs
+# # Visualize graphs
 
-layout = G.layout(layout="graphopt")
-name_layout = {G.vs[i]["name"]: layout.coords[i] for i in G.vs.indices}
+# layout = G.layout(layout="graphopt")
+# name_layout = {G.vs[i]["name"]: layout.coords[i] for i in G.vs.indices}
 
 
-ig.plot(G, target="pre-graph.png", layout=layout, vertex_label = G.vs["name"])
-plt.close()
+# ig.plot(G, target="pre-graph.png", layout=layout, vertex_label = G.vs["name"])
+# plt.close()
 
-ig.plot(G2, target="post-graph.png", layout=ig.Layout([name_layout[v["name"]] for v in V2]), vertex_label = V2["name"])
-plt.close()
+# ig.plot(G2, target="post-graph.png", layout=ig.Layout([name_layout[v["name"]] for v in V2]), vertex_label = V2["name"])
+# plt.close()
