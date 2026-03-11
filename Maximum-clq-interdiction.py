@@ -37,7 +37,8 @@ class CIPCallback:
         
         # Adding lazy constraint
         if theta_hat < len(max_clique):
-            model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))
+            model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
+            # model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))
             
 #--------------------------------------------------------------------------------
 
@@ -47,23 +48,21 @@ class CIPCallback:
 def solve_clq_int(graph, budget):
     with gp.Env() as env, gp.Model(env=env) as m:
         n = graph.vcount()
+        adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
 
         # Variable definitions
         theta = m.addVar(vtype=GRB.INTEGER, name='theta') #Maximum size of remaining cliques
         z = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='z') #Interdicted vertices
-        x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='x') #Active vertices
+        x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='x') #Deleted vertices
 
         # Constraint definitions
         m.addConstr(gp.quicksum(z) <= budget, name='budget')
         m.addConstr(theta >= 0, name='theta_lb')
-        for u in graph.vs:
-            u_nbrs = graph.neighbors(u)
-            deg_u = graph.degree(u)
-            u_name = graph.vs[u.index]["name"]
-            m.addConstr(gp.quicksum(x[graph.vs[v]["name"]] for v in u_nbrs) >= deg_u * z[u_name], name='clq_int')
-            m.addConstr(gp.quicksum(z[graph.vs[v]["name"]] for v in u_nbrs) >= x[u_name], name='clq_nonint')
-            m.addConstr(x[u_name] >= z[u_name], name='del_int')
-
+        for u, nbrs in adj.items():
+            for v in nbrs:
+                m.addConstr(x[v] >= z[u], name='clq_int')
+            m.addConstr(gp.quicksum(z[v] for v in nbrs) >= x[u], name='clq_nonint')
+            m.addConstr(x[u] >= z[u], name='del_int')
 
         # Optimization
         m.Params.LazyConstraints = 1
@@ -84,6 +83,7 @@ class MCCallback:
     def __init__(self, x, graph):
         self.G = graph
         self.x = x
+        self.adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
     
     def __call__(self, model, where):
         if where == GRB.Callback.MIPSOL:
@@ -93,14 +93,7 @@ class MCCallback:
                 model.terminate()
     
     def enforce_adjacency(self, model):
-        x_hat = model.cbGetSolution(self.x)
-        i_v_dict = {v["name"]: v.index for v in self.G.vs}
-
-        for v, i_v in i_v_dict.items():
-            if x_hat[v] > 0.5:
-                for u, i_u in i_v_dict.items():
-                    if self.G[i_v, i_u] < 1 and x_hat[v] + x_hat[u] > 1 and v != u: # Check for selection in non-neighbors 
-                        model.cbLazy(self.x[v] + self.x[u] <= 1)
+        pass
 #--------------------------------------------------------------------------------
 
 
@@ -109,11 +102,18 @@ class MCCallback:
 def solve_max_clq(graph):
     with gp.Env() as env, gp.Model(env=env) as m:
         x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices in the clique
+        
+        adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
+        for v, nbrs in adj.items():
+            for i in range(graph.vcount()):
+                u = graph.vs[i]["name"]
+                if u not in nbrs and u != v:
+                    m.addConstr(x[v] + x[u] <= 1, name="clq_adj")
 
-        m.Params.LazyConstraints = 1
-        cb = MCCallback(x, graph)
+        # m.Params.LazyConstraints = 1
+        # cb = MCCallback(x, graph)
         m.setObjective(gp.quicksum(x), GRB.MAXIMIZE)
-        m.optimize(cb)
+        m.optimize()
 
         clique = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
         return clique
@@ -123,7 +123,7 @@ def solve_max_clq(graph):
 # Define test graphs
 #--------------------------------------------------------------------------------
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
-G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"CIP_example.graph")
+G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"karate.graph")
 
 # c = solve_max_clq(G)
 # print(c)
@@ -134,7 +134,7 @@ int_nodes, del_nodes, max_clq_size = solve_clq_int(G, 2)
 V2 = G.vs.select(name_notin=del_nodes) #Selects vertex objects needed for interdicted graph by name attribute
 G2 = G.induced_subgraph(V2)
 print(int_nodes)
-
+'''
 # Visualize graphs
 
 layout = G.layout(layout="graphopt")
@@ -146,3 +146,4 @@ plt.close()
 
 ig.plot(G2, target="post-graph.png", layout=ig.Layout([name_layout[v["name"]] for v in V2]), vertex_label = V2["name"])
 plt.close()
+'''
