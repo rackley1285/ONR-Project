@@ -31,15 +31,14 @@ class CIPCallback:
         G_int = self.G.induced_subgraph(V_bar)
         
         # Finding a maximum clique for lazy constraint
-        # cliques = G_int.maximal_cliques()
-        # max_clique = max(cliques, key=len)
-        max_clique = solve_max_clq(G_int)
-        
-        # Adding lazy constraint
+        max_clique = solve_max_clq(G_int, theta_hat)
         if theta_hat < len(max_clique):
             model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
-            # model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))
-            
+        
+        # cliques = G_int.maximal_cliques()
+        # max_clique = max(cliques, key=len)
+        # if theta_hat < len(max_clique):
+            # model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))           
 #--------------------------------------------------------------------------------
 
 
@@ -99,7 +98,7 @@ class MCCallback:
 
 # Maximum clique solver function
 #--------------------------------------------------------------------------------
-def solve_max_clq(graph):
+def solve_max_clq(graph, theta):
     with gp.Env() as env, gp.Model(env=env) as m:
         x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices in the clique
         
@@ -112,6 +111,7 @@ def solve_max_clq(graph):
 
         # m.Params.LazyConstraints = 1
         # cb = MCCallback(x, graph)
+        m.Params.BestObjStop = theta
         m.setObjective(gp.quicksum(x), GRB.MAXIMIZE)
         m.optimize()
 
@@ -123,7 +123,7 @@ def solve_max_clq(graph):
 # Define test graphs
 #--------------------------------------------------------------------------------
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
-G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"karate.graph")
+G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"CIP_example.graph")
 
 # c = solve_max_clq(G)
 # print(c)
