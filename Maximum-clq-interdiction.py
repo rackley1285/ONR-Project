@@ -26,21 +26,21 @@ class CIPCallback:
         theta_hat = model.cbGetSolution(self.theta)
         x_hat = model.cbGetSolution(self.x)
         
-        # Finding a maximum clique for lazy constraint
-        V_int = [v for v in self.G.vs["name"] if x_hat[v] > 0.5] # List of deleted vertices
-        max_clique = self.solver.solve(V_int, theta_hat + 1) # Max clique in remaining graph
-        if theta_hat < len(max_clique):
-            model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
+        # # Finding a maximum clique for lazy constraint
+        # V_int = [v for v in self.G.vs["name"] if x_hat[v] > 0.5] # List of deleted vertices
+        # max_clique = self.solver.solve(V_int, theta_hat + 1) # Max clique in remaining graph
+        # if theta_hat < len(max_clique):
+        #     model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
 
         # Creating interdicted subgraph
-        # V_bar = [v for v in self.G.vs["name"] if x_hat[v] < 0.5] #Selects names of non-interdicted vertices
-        # V_bar = self.G.vs.select(name_in=V_bar) #Selects vertex objects for interdicted graph by name attribute
-        # G_int = self.G.induced_subgraph(V_bar)
+        V_bar = [v for v in self.G.vs["name"] if x_hat[v] < 0.5] #Selects names of non-interdicted vertices
+        V_bar = self.G.vs.select(name_in=V_bar) #Selects vertex objects for interdicted graph by name attribute
+        G_int = self.G.induced_subgraph(V_bar)
 
-        # cliques = G_int.maximal_cliques()
-        # max_clique = max(cliques, key=len)
-        # if theta_hat < len(max_clique):
-            # model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))           
+        cliques = G_int.maximal_cliques()
+        max_clique = max(cliques, key=len)
+        if theta_hat < len(max_clique):
+            model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))           
 #--------------------------------------------------------------------------------
 
 
@@ -86,6 +86,7 @@ class MCSolver:
         self.env = gp.Env()
         self.m = gp.Model(env=self.env)
         self.m.Params.OutputFlag = 0
+
 
         self.x = self.m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices included in the clique
 
@@ -146,24 +147,20 @@ def solve_max_clq(graph, theta, interdicted):
 # Define test graphs
 #--------------------------------------------------------------------------------
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
-G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"karate.graph")
-
-# c = solve_max_clq(G)
-# print(c)
-# print(max(G.maximal_cliques(), key=len))
+G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"power.graph")
 
 # Solve problem
-mc_solver = MCSolver(G)
+# mc_solver = MCSolver(G)
+mc_solver = 1
+
 int_nodes, del_nodes, max_clq_size = solve_clq_int(G, 2)
-V2 = G.vs.select(name_notin=del_nodes) #Selects vertex objects needed for interdicted graph by name attribute
-G2 = G.induced_subgraph(V2)
 print(int_nodes)
-
-
-
 
 '''
 # Visualize graphs
+
+V2 = G.vs.select(name_notin=del_nodes) #Selects vertex objects needed for interdicted graph by name attribute
+G2 = G.induced_subgraph(V2)
 
 layout = G.layout(layout="graphopt")
 name_layout = {G.vs[i]["name"]: layout.coords[i] for i in G.vs.indices}
