@@ -4,6 +4,9 @@ import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
 import algorithms as a
+import time
+import os
+import pandas as pd
 
 # Clique interdiction callback class
 #--------------------------------------------------------------------------------
@@ -13,11 +16,20 @@ class CIPCallback:
         self.theta = theta
         self.G = graph
         self.solver = solver
+        self.CB = 0
+        self.LC = 0
+        self.CB_time = 0
 
     def __call__(self, model, where):
         if where == GRB.Callback.MIPSOL:
             try:
+                t0 = time.time()
                 self.restrict_clique(model)
+                
+                # Update statistics
+                self.CB += 1
+                self.CB_time += time.time() - t0
+
             except Exception:
                 model.terminate()
     
@@ -26,32 +38,40 @@ class CIPCallback:
         theta_hat = model.cbGetSolution(self.theta)
         x_hat = model.cbGetSolution(self.x)
         
-        # # Finding a maximum clique for lazy constraint
-        # V_int = [v for v in self.G.vs["name"] if x_hat[v] > 0.5] # List of deleted vertices
-        # max_clique = self.solver.solve(V_int, theta_hat + 1) # Max clique in remaining graph
-        # if theta_hat < len(max_clique):
-        #     model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
+        if self.solver == "enum":
+            # Creating interdicted subgraph
+            V_bar = [v for v in self.G.vs["name"] if x_hat[v] < 0.5] #Selects names of non-interdicted vertices
+            V_bar = self.G.vs.select(name_in=V_bar) #Selects vertex objects for interdicted graph by name attribute
+            G_int = self.G.induced_subgraph(V_bar)
 
-        # Creating interdicted subgraph
-        V_bar = [v for v in self.G.vs["name"] if x_hat[v] < 0.5] #Selects names of non-interdicted vertices
-        V_bar = self.G.vs.select(name_in=V_bar) #Selects vertex objects for interdicted graph by name attribute
-        G_int = self.G.induced_subgraph(V_bar)
-
-        cliques = G_int.maximal_cliques()
-        max_clique = max(cliques, key=len)
-        if theta_hat < len(max_clique):
-            model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))           
+            # Enumerate maximal cliques
+            cliques = G_int.maximal_cliques()
+            max_clique = max(cliques, key=len)
+            if theta_hat < len(max_clique):
+                model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))
+                self.LC += 1
+        
+        else:
+            # Finding a maximum clique for lazy constraint
+            V_del = [v for v in self.G.vs["name"] if x_hat[v] > 0.5] # List of deleted vertices
+            max_clique = self.solver.solve(V_del, theta_hat) # Max clique in remaining graph
+            if theta_hat < len(max_clique):
+                model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
+                self.LC += 1
 #--------------------------------------------------------------------------------
 
 
 # Clique interdiction solver function
 #--------------------------------------------------------------------------------
-def solve_clq_int(graph, budget):
+def solve_clq_int(graph, budget, separation):
     with gp.Env() as env, gp.Model(env=env) as m:
-        n = graph.vcount()
+        # Python variables
+        sep_procs = ["enum", "MIP"]
+        t0 = time.time()
+        solver = MCSolver(graph) if separation == 1 else sep_procs[separation]
         adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
 
-        # Variable definitions
+        # Gurobi variables
         theta = m.addVar(vtype=GRB.INTEGER, name='theta') #Maximum size of remaining cliques
         z = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='z') #Interdicted vertices
         x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='x') #Deleted vertices
@@ -66,15 +86,18 @@ def solve_clq_int(graph, budget):
             m.addConstr(x[u] >= z[u], name='del_int')
 
         # Optimization
+        m.Params.OutputFlag = 0
         m.Params.LazyConstraints = 1
-        cb = CIPCallback(x, theta, graph, mc_solver)
+        m.Params.TimeLimit = 3600
+        cb = CIPCallback(x, theta, graph, solver)
         m.setObjective(theta, GRB.MINIMIZE)
         m.optimize(cb)
+        total_t = time.time() - t0 if m.Status != GRB.TIME_LIMIT else "TL"
 
-        # Returning vertex names (as stored in z) and objective value
+        # Returning solution statistics and data
         u_int = [i for i in z if z[i].getAttr(GRB.Attr.X) > 0.5]
         u_del = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
-        return u_int, u_del, m.ObjVal
+        return len(u_int), m.ObjVal, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time
 #--------------------------------------------------------------------------------
 
 
@@ -87,8 +110,9 @@ class MCSolver:
         self.m = gp.Model(env=self.env)
         self.m.Params.OutputFlag = 0
 
-
         self.x = self.m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices included in the clique
+
+        # Find connected components first, then add constraints for each component (when non-neighbors AND in same component)
 
         adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
         vertices = graph.vs["name"]
@@ -107,10 +131,12 @@ class MCSolver:
             self.x[v].ub = 0 if v in interdicted_set else 1
 
         # Optimize model and return solution
-        self.m.Params.BestObjStop = theta
+        self.m.Params.BestObjStop = theta + 0.5
         self.m.optimize()
-        print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
+        #print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
         
+        # Check status to see if it reached optimality or target
+
         clique = [i for i in self.x if self.x[i].X > 0.5]
         return clique
 
@@ -144,17 +170,36 @@ def solve_max_clq(graph, theta, interdicted):
 #--------------------------------------------------------------------------------
 
 
-# Define test graphs
+# Function to run solver on a graph file
 #--------------------------------------------------------------------------------
+def max_clq_int(path, file, separation):
+    G = a.rd(path, file, printsense=False)
+    filename = file.split(".")[0]
+    return [filename] + list(solve_clq_int(G, 2, separation))
+#--------------------------------------------------------------------------------
+
+
+#--------------------------------------------------------------------------------
+if __name__ == "__main__":
+    ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)"]
+    
+    data = []
+    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
+    
+    df = pd.DataFrame(data, columns = ex_col)
+    df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
+
+
+    data = []
+    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
+    
+    df = pd.DataFrame(data, columns = ex_col)
+    df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
+
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
-G = a.rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"power.graph")
 
-# Solve problem
-# mc_solver = MCSolver(G)
-mc_solver = 1
-
-int_nodes, del_nodes, max_clq_size = solve_clq_int(G, 2)
-print(int_nodes)
 
 '''
 # Visualize graphs
