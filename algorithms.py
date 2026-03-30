@@ -4,9 +4,10 @@ import sys, time
 
 # Read in DIMACS10 file format
 #--------------------------------------------------------------------------------
-def rd(pathname,filename):
+def rd(pathname,filename, printsense=True):
     """Read graph instance in DIMACS clustering challenge format."""
-    print("DIMACS10 Instance:",filename)
+    if printsense:
+        print("DIMACS10 Instance:",filename)
     start = time.time()
     with open(pathname+filename,'r') as infile:
         line = infile.readline()
@@ -15,8 +16,9 @@ def rd(pathname,filename):
         fmt = int(line.split()[2])
         G = ig.Graph()
         if fmt==0:
-            print("#Vertices",vertices)
-            print("#Edges",edges)
+            if printsense:
+                print("#Vertices",vertices)
+                print("#Edges",edges)
             G.add_vertices(range(vertices))
             
             u = 0
@@ -27,7 +29,8 @@ def rd(pathname,filename):
                     u = u + 1
 #                    print("Vertex", u, " is isolated.")
                 elif (line[0] == '%'): 
-                    print("Skipping comment: ",line)
+                    if printsense:
+                        print("Skipping comment: ",line)
                 else:
                     u = u + 1
                     for word in line.split():
@@ -36,8 +39,10 @@ def rd(pathname,filename):
             G.add_edges(edges)
             G.vs["name"] = range(1, vertices + 1)
         else:
-            print("DIMACS10 weighted graphs need a new reader!")
-    print(f"Graph read in {time.time() - start:.2f} seconds")
+            if printsense:
+                print("DIMACS10 weighted graphs need a new reader!")
+    if printsense:
+        print(f"Graph read in {time.time() - start:.2f} seconds")
     return G
 #--------------------------------------------------------------------------------
 
