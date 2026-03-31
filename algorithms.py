@@ -1,6 +1,6 @@
 import igraph as ig
 import sys, time
-
+import os
 
 # Read in DIMACS10 file format
 #--------------------------------------------------------------------------------
@@ -39,27 +39,42 @@ def rd(pathname,filename, printsense=True):
             G.add_edges(edges)
             G.vs["name"] = range(1, vertices + 1)
         else:
-            if printsense:
-                print("DIMACS10 weighted graphs need a new reader!")
+           print("DIMACS10 weighted graphs need a new reader!")
     if printsense:
         print(f"Graph read in {time.time() - start:.2f} seconds")
     return G
 #--------------------------------------------------------------------------------
 
 
-# Find random clique of size k, if it exists
+# Greedy heuristic function for the lower bound of a maximum clique
 #--------------------------------------------------------------------------------
-def find_clique(graph, k):
-    k_core = graph.k_core(k - 1 if k > 1 else 1)
-    kc_clique = k_core.cliques(min=k, max=k)[0]
-    G_clique = [k_core.vs[i]["name"] for i in kc_clique]
-    return G_clique
+def greedy_lb_max_clq(graph):
+    lb_clq = []
+    for v in sorted(graph.vs, key=lambda x: graph.degree(x), reverse=True):
+        clique = [v["name"]]
+        v_nbrs = set(graph.neighbors(v))
+        while v_nbrs:
+            u = max(v_nbrs, key=lambda x: len(v_nbrs & set(graph.neighbors(x))))
+            clique.append(u)
+            v_nbrs &= set(graph.neighbors(u))
+        if len(clique) > len(lb_clq):
+            lb_clq = clique
+    return len(lb_clq)
+#--------------------------------------------------------------------------------
+
+
+# Graph peeling by vertex coreness (number for max k-core that includes vertex)
+#--------------------------------------------------------------------------------
+def core_peel(graph, k):
+    core = graph.coreness()
+    graph.delete_vertices([v.index for v in graph.vs if core[v.index] < k])
+    return graph
 #--------------------------------------------------------------------------------
 
 
 # Testing grounds
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
-    G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", r"CIP_example.graph")
-    print(find_clique(G, 0))
-
+    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+        G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", file, printsense=False)
+        print(file)
