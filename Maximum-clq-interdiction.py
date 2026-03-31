@@ -92,6 +92,7 @@ def solve_clq_int(graph, budget, separation):
         cb = CIPCallback(x, theta, graph, solver)
         m.setObjective(theta, GRB.MINIMIZE)
         m.optimize(cb)
+        del solver
         total_t = time.time() - t0 if m.Status != GRB.TIME_LIMIT else "TL"
 
         # Returning solution statistics and data
@@ -109,18 +110,27 @@ class MCSolver:
         self.env = gp.Env()
         self.m = gp.Model(env=self.env)
         self.m.Params.OutputFlag = 0
+        
+        # # Graph preprocessing
+        # mc_lb = a.greedy_lb_max_clq(graph)
+        # graph = a.core_peel(graph, mc_lb - 1)
+        self.components = graph.components()
 
         self.x = self.m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices included in the clique
+        self.f = self.m.addVars(range(len(self.components)), vtype=GRB.BINARY, name="f")
 
         # Find connected components first, then add constraints for each component (when non-neighbors AND in same component)
-
-        adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
-        vertices = graph.vs["name"]
-        for v, nbrs in adj.items():
-            for u in vertices:
-                if u not in nbrs and u != v:
-                    self.m.addConstr(self.x[v] + self.x[u] <= 1, name="clq_adj")
+        for i, component in enumerate(self.components):
+            comp_adj = {graph.vs[v]["name"]: set(graph.vs[u]["name"] for u in graph.neighbors(v)) for v in component}
+            for v, nbrs in comp_adj.items():
+                self.m.addConstr(self.x[v] <= self.f[i], name="compt_memb")
+                for u in component:
+                    u = graph.vs[u]["name"]
+                    if u not in nbrs and u != v:
+                        self.m.addConstr(self.x[v] + self.x[u] <= 1, name="clq_adj")
         
+        self.m.addConstr(gp.quicksum(self.f) == 1, name="1_compt")
+
         self.m.setObjective(gp.quicksum(self.x), GRB.MAXIMIZE)
         self.m.update()
 
@@ -133,7 +143,7 @@ class MCSolver:
         # Optimize model and return solution
         self.m.Params.BestObjStop = theta + 0.5
         self.m.optimize()
-        #print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
+        print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
         
         # Check status to see if it reached optimality or target
 
@@ -143,30 +153,6 @@ class MCSolver:
     def __del__(self):
         self.m.dispose()
         self.env.dispose()
-#--------------------------------------------------------------------------------
-
-
-# Maximum clique solver function
-#--------------------------------------------------------------------------------
-def solve_max_clq(graph, theta, interdicted):
-    with gp.Env() as env, gp.Model(env=env) as m:
-        x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices in the clique
-        for v in interdicted:
-            x[v].ub = 0
-        
-        adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
-        vertices = graph.vs["name"]
-        for v, nbrs in adj.items():
-            for u in vertices:
-                if u not in nbrs and u != v:
-                    m.addConstr(x[v] + x[u] <= 1, name="clq_adj")
-
-        m.Params.BestObjStop = theta
-        m.setObjective(gp.quicksum(x), GRB.MAXIMIZE)
-        m.optimize()
-
-        clique = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
-        return clique
 #--------------------------------------------------------------------------------
 
 
@@ -184,19 +170,22 @@ if __name__ == "__main__":
     ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)"]
     
     data = []
-    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
+    data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", "karate.graph", 1))
+    print(data)
+    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+    #     print(file)
+    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
     
-    df = pd.DataFrame(data, columns = ex_col)
-    df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
+    # df = pd.DataFrame(data, columns = ex_col)
+    # df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
 
 
-    data = []
-    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
+    # data = []
+    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
     
-    df = pd.DataFrame(data, columns = ex_col)
-    df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
+    # df = pd.DataFrame(data, columns = ex_col)
+    # df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
 
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
 
