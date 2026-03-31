@@ -8,6 +8,100 @@ import time
 import os
 import pandas as pd
 
+# Clique interdiction solver function
+#--------------------------------------------------------------------------------
+def solve_clq_int(graph, budget, separation):
+    with gp.Env() as env, gp.Model(env=env) as m:
+        # Python variables
+        sep_procs = ["enum", "MIP"]
+        t0 = time.time()
+        solver = MCSolver(graph) if separation == 1 else sep_procs[separation]
+        adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
+
+        # Gurobi variables
+        theta = m.addVar(vtype=GRB.INTEGER, name='theta') #Maximum size of remaining cliques
+        z = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='z') #Interdicted vertices
+        x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='x') #Deleted vertices
+
+        # Constraint definitions
+        m.addConstr(gp.quicksum(z) <= budget, name='budget')
+        m.addConstr(theta >= 0, name='theta_lb')
+        for u, nbrs in adj.items():
+            for v in nbrs:
+                m.addConstr(x[v] >= z[u], name='clq_int')
+            m.addConstr(gp.quicksum(z[v] for v in nbrs) >= x[u], name='clq_nonint')
+            m.addConstr(x[u] >= z[u], name='del_int')
+
+        # Optimization
+        m.Params.OutputFlag = 0
+        m.Params.LazyConstraints = 1
+        m.Params.TimeLimit = 3600
+        cb = CIPCallback(x, theta, graph, solver)
+        m.setObjective(theta, GRB.MINIMIZE)
+        m.optimize(cb)
+        del solver
+
+        # Returning solution statistics and data
+        total_t = time.time() - t0 if m.Status != GRB.TIME_LIMIT else "TL"
+        u_int = [i for i in z if z[i].getAttr(GRB.Attr.X) > 0.5]
+        u_del = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
+        return len(u_int), m.ObjVal, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time
+#--------------------------------------------------------------------------------
+
+
+# Maximum clique solver class
+#--------------------------------------------------------------------------------
+class MCSolver:
+    def __init__(self, graph):
+        self.G = graph
+        self.env = gp.Env()
+        self.m = gp.Model(env=self.env)
+        self.m.Params.OutputFlag = 0
+        
+        # # Graph preprocessing
+        # mc_lb = a.greedy_lb_max_clq(graph)
+        # graph = a.core_peel(graph, mc_lb - 1)
+        self.components = graph.components()
+        self.x = self.m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices included in the clique
+        self.f = self.m.addVars(range(len(self.components)), vtype=GRB.BINARY, name="f")
+
+        # Find connected components first, then add constraints for each component (when non-neighbors AND in same component)
+        for i, component in enumerate(self.components):
+            comp_adj = {graph.vs[v]["name"]: set(graph.vs[u]["name"] for u in graph.neighbors(v)) for v in component}
+            for v, nbrs in comp_adj.items():
+                self.m.addConstr(self.x[v] <= self.f[i], name="compt_memb")
+                for u in component:
+                    u = graph.vs[u]["name"]
+                    if u not in nbrs and u != v:
+                        self.m.addConstr(self.x[v] + self.x[u] <= 1, name="clq_adj")
+        
+        self.m.addConstr(gp.quicksum(self.f) == 1, name="1_compt")
+
+        self.m.setObjective(gp.quicksum(self.x), GRB.MAXIMIZE)
+        self.m.update()
+
+    def solve(self, deleted, theta):
+        # Update variable upper bounds
+        deleted_set = set(deleted)
+        for v in self.x:
+            self.x[v].ub = 0 if v in deleted_set else 1
+
+        # Optimize model and return solution
+        self.m.Params.BestObjStop = theta + 0.5
+        self.m.optimize()
+        print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
+        
+        # Check status to see if it reached optimality or target
+
+        clique = [i for i in self.x if self.x[i].X > 0.5]
+        return clique
+
+    def __del__(self):
+        self.m.dispose()
+        self.env.dispose()
+#--------------------------------------------------------------------------------
+
+
 # Clique interdiction callback class
 #--------------------------------------------------------------------------------
 class CIPCallback:
@@ -58,101 +152,6 @@ class CIPCallback:
             if theta_hat < len(max_clique):
                 model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
                 self.LC += 1
-#--------------------------------------------------------------------------------
-
-
-# Clique interdiction solver function
-#--------------------------------------------------------------------------------
-def solve_clq_int(graph, budget, separation):
-    with gp.Env() as env, gp.Model(env=env) as m:
-        # Python variables
-        sep_procs = ["enum", "MIP"]
-        t0 = time.time()
-        solver = MCSolver(graph) if separation == 1 else sep_procs[separation]
-        adj = {v['name']: set(graph.vs[u]["name"] for u in graph.neighbors(v.index)) for v in graph.vs}
-
-        # Gurobi variables
-        theta = m.addVar(vtype=GRB.INTEGER, name='theta') #Maximum size of remaining cliques
-        z = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='z') #Interdicted vertices
-        x = m.addVars(graph.vs["name"], vtype=GRB.BINARY, name='x') #Deleted vertices
-
-        # Constraint definitions
-        m.addConstr(gp.quicksum(z) <= budget, name='budget')
-        m.addConstr(theta >= 0, name='theta_lb')
-        for u, nbrs in adj.items():
-            for v in nbrs:
-                m.addConstr(x[v] >= z[u], name='clq_int')
-            m.addConstr(gp.quicksum(z[v] for v in nbrs) >= x[u], name='clq_nonint')
-            m.addConstr(x[u] >= z[u], name='del_int')
-
-        # Optimization
-        m.Params.OutputFlag = 0
-        m.Params.LazyConstraints = 1
-        m.Params.TimeLimit = 3600
-        cb = CIPCallback(x, theta, graph, solver)
-        m.setObjective(theta, GRB.MINIMIZE)
-        m.optimize(cb)
-        del solver
-        total_t = time.time() - t0 if m.Status != GRB.TIME_LIMIT else "TL"
-
-        # Returning solution statistics and data
-        u_int = [i for i in z if z[i].getAttr(GRB.Attr.X) > 0.5]
-        u_del = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
-        return len(u_int), m.ObjVal, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time
-#--------------------------------------------------------------------------------
-
-
-# Maximum clique solver class
-#--------------------------------------------------------------------------------
-class MCSolver:
-    def __init__(self, graph):
-        self.G = graph
-        self.env = gp.Env()
-        self.m = gp.Model(env=self.env)
-        self.m.Params.OutputFlag = 0
-        
-        # # Graph preprocessing
-        # mc_lb = a.greedy_lb_max_clq(graph)
-        # graph = a.core_peel(graph, mc_lb - 1)
-        self.components = graph.components()
-
-        self.x = self.m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices included in the clique
-        self.f = self.m.addVars(range(len(self.components)), vtype=GRB.BINARY, name="f")
-
-        # Find connected components first, then add constraints for each component (when non-neighbors AND in same component)
-        for i, component in enumerate(self.components):
-            comp_adj = {graph.vs[v]["name"]: set(graph.vs[u]["name"] for u in graph.neighbors(v)) for v in component}
-            for v, nbrs in comp_adj.items():
-                self.m.addConstr(self.x[v] <= self.f[i], name="compt_memb")
-                for u in component:
-                    u = graph.vs[u]["name"]
-                    if u not in nbrs and u != v:
-                        self.m.addConstr(self.x[v] + self.x[u] <= 1, name="clq_adj")
-        
-        self.m.addConstr(gp.quicksum(self.f) == 1, name="1_compt")
-
-        self.m.setObjective(gp.quicksum(self.x), GRB.MAXIMIZE)
-        self.m.update()
-
-    def solve(self, interdicted, theta):
-        # Update variable upper bounds
-        interdicted_set = set(interdicted)
-        for v in self.x:
-            self.x[v].ub = 0 if v in interdicted_set else 1
-
-        # Optimize model and return solution
-        self.m.Params.BestObjStop = theta + 0.5
-        self.m.optimize()
-        print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
-        
-        # Check status to see if it reached optimality or target
-
-        clique = [i for i in self.x if self.x[i].X > 0.5]
-        return clique
-
-    def __del__(self):
-        self.m.dispose()
-        self.env.dispose()
 #--------------------------------------------------------------------------------
 
 
