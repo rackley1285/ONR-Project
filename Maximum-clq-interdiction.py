@@ -169,22 +169,20 @@ if __name__ == "__main__":
     ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)"]
     
     data = []
-    data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", "karate.graph", 1))
-    print(data)
-    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-    #     print(file)
-    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
+    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+        print(file)
+        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
     
-    # df = pd.DataFrame(data, columns = ex_col)
-    # df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
+    df = pd.DataFrame(data, columns = ex_col)
+    df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
 
 
-    # data = []
-    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
+    data = []
+    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
     
-    # df = pd.DataFrame(data, columns = ex_col)
-    # df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
+    df = pd.DataFrame(data, columns = ex_col)
+    df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
 
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
 
