@@ -57,10 +57,8 @@ class MCSolver:
         self.env = gp.Env()
         self.m = gp.Model(env=self.env)
         self.m.Params.OutputFlag = 0
+        self.m.Params.MIPFocus = 1
         
-        # # Graph preprocessing
-        # mc_lb = a.greedy_lb_max_clq(graph)
-        # graph = a.core_peel(graph, mc_lb - 1)
         self.components = graph.components()
         self.x = self.m.addVars(graph.vs["name"], vtype=GRB.BINARY, name="x") # Vertices included in the clique
         self.f = self.m.addVars(range(len(self.components)), vtype=GRB.BINARY, name="f")
@@ -82,9 +80,10 @@ class MCSolver:
 
     def solve(self, deleted, theta):
         # Update variable upper bounds
+        peeled_set = {v["name"] for v in self.G.vs if self.G.coreness()[v.index] < theta - 1}
         deleted_set = set(deleted)
         for v in self.x:
-            self.x[v].ub = 0 if v in deleted_set else 1
+            self.x[v].ub = 0 if v in deleted_set or v in peeled_set else 1
 
         # Optimize model and return solution
         self.m.Params.BestObjStop = theta + 0.5
@@ -169,20 +168,21 @@ if __name__ == "__main__":
     ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)"]
     
     data = []
-    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-        print(file)
-        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
+    print(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", "netscience.graph", 1))
+    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+    #     print(file)
+    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
     
-    df = pd.DataFrame(data, columns = ex_col)
-    df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
+    # df = pd.DataFrame(data, columns = ex_col)
+    # df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
 
 
-    data = []
-    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-        data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
+    # data = []
+    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
     
-    df = pd.DataFrame(data, columns = ex_col)
-    df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
+    # df = pd.DataFrame(data, columns = ex_col)
+    # df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
 
 #G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
 
