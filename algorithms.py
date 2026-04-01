@@ -12,13 +12,13 @@ def rd(pathname,filename, printsense=True):
     with open(pathname+filename,'r') as infile:
         line = infile.readline()
         vertices = int(line.split()[0])
-        edges = int(line.split()[1])
+        edge_count = int(line.split()[1])
         fmt = int(line.split()[2])
         G = ig.Graph()
         if fmt==0:
             if printsense:
                 print("#Vertices",vertices)
-                print("#Edges",edges)
+                print("#Edges",edge_count)
             G.add_vertices(range(vertices))
             
             u = 0
@@ -37,6 +37,35 @@ def rd(pathname,filename, printsense=True):
                         if int(word) > u:
                             edges.append((u-1,(int(word)-1)))
             G.add_edges(edges)
+            G.vs["name"] = range(1, vertices + 1)
+        elif fmt == 1:
+            if printsense:
+                print("#Vertices",vertices)
+                print("#Edges",edge_count)
+            G.add_vertices(range(vertices))
+
+            u = 0
+            edges = []
+            weights = []
+            add_weight = False
+            while (u <= vertices):
+                line = infile.readline()
+                if (not line.strip()):
+                    u = u + 1
+#                    print("Vertex", u, " is isolated.")
+                elif (line[0] == '%'): 
+                    if printsense:
+                        print("Skipping comment: ",line)
+                else:
+                    u = u + 1
+                    for i, word in enumerate(line.split()):
+                        if int(word) > u and i % 2 == 0:
+                            edges.append((u-1,(int(word)-1)))
+                            add_weight = True
+                        elif i % 2 == 1 and add_weight:
+                            weights.append(int(word))
+                            add_weight = False
+            G.add_edges(edges, attributes={"weight": weights})
             G.vs["name"] = range(1, vertices + 1)
         else:
            print("DIMACS10 weighted graphs need a new reader!")
@@ -75,6 +104,9 @@ def core_peel(graph, k):
 # Testing grounds
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
-    for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-        G = rd(r"C:\Users\rackl\ONR-Project\testbed\\", file, printsense=False)
-        print(file)
+    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\troublesome_graphs\\"):
+    #     G = rd(r"C:\Users\rackl\ONR-Project\troublesome_graphs\\", file, printsense=False)
+    #     print(file)
+    
+    G = rd(r"C:\Users\rackl\ONR-Project\troublesome_graphs\\", "lesmis.graph", )
+    print(list(G.es["weight"]))
