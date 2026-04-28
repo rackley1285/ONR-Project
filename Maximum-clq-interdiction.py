@@ -4,8 +4,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import matplotlib.pyplot as plt
 import algorithms as a
-import time
-import os
+import time, os, math
 import pandas as pd
 
 # Clique interdiction solver function
@@ -42,10 +41,11 @@ def solve_clq_int(graph, budget, separation):
         del solver
 
         # Returning solution statistics and data
-        total_t = time.time() - t0 if m.Status != GRB.TIME_LIMIT else "TL"
-        u_int = [i for i in z if z[i].getAttr(GRB.Attr.X) > 0.5]
-        u_del = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
-        return len(u_int), m.ObjVal, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time
+        total_t = time.time() - t0 if m.Status != GRB.TIME_LIMIT and m.SolCount > 0 else "TL"
+        u_int = [i for i in z if z[i].getAttr(GRB.Attr.X) > 0.5] if m.SolCount > 0 else []
+        #u_del = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
+        obj = m.ObjVal if m.SolCount > 0 else -1
+        return len(u_int), obj, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time
 #--------------------------------------------------------------------------------
 
 
@@ -67,7 +67,7 @@ class MCSolver:
         for i, component in enumerate(self.components):
             comp_adj = {graph.vs[v]["name"]: set(graph.vs[u]["name"] for u in graph.neighbors(v)) for v in component}
             for v, nbrs in comp_adj.items():
-                self.m.addConstr(self.x[v] <= self.f[i], name="compt_memb")
+                self.m.addConstr(self.x[v] <= self.f[i], name="compnt_memb")
                 for u in component:
                     u = graph.vs[u]["name"]
                     if u not in nbrs and u != v:
@@ -88,11 +88,11 @@ class MCSolver:
         # Optimize model and return solution
         self.m.Params.BestObjStop = theta + 0.5
         self.m.optimize()
-        print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
+        #print(f"Status: {self.m.Status}, SolCount: {self.m.SolCount}")
         
         # Check status to see if it reached optimality or target
 
-        clique = [i for i in self.x if self.x[i].X > 0.5]
+        clique = [i for i in self.x if self.x[i].X > 0.5] if self.m.Status != GRB.TIME_LIMIT and self.m.SolCount > 0 else "TL"
         return clique
 
     def __del__(self):
@@ -112,6 +112,7 @@ class CIPCallback:
         self.CB = 0
         self.LC = 0
         self.CB_time = 0
+        self.start = time.time()
 
     def __call__(self, model, where):
         if where == GRB.Callback.MIPSOL:
@@ -122,7 +123,6 @@ class CIPCallback:
                 # Update statistics
                 self.CB += 1
                 self.CB_time += time.time() - t0
-
             except Exception:
                 model.terminate()
     
@@ -133,7 +133,7 @@ class CIPCallback:
         
         if self.solver == "enum":
             # Creating interdicted subgraph
-            V_bar = [v for v in self.G.vs["name"] if x_hat[v] < 0.5] #Selects names of non-interdicted vertices
+            V_bar = [v for v in self.G.vs["name"] if x_hat[v] < 0.5] #Selects names of non-deleted vertices
             V_bar = self.G.vs.select(name_in=V_bar) #Selects vertex objects for interdicted graph by name attribute
             G_int = self.G.induced_subgraph(V_bar)
 
@@ -147,8 +147,11 @@ class CIPCallback:
         else:
             # Finding a maximum clique for lazy constraint
             V_del = [v for v in self.G.vs["name"] if x_hat[v] > 0.5] # List of deleted vertices
+            self.solver.m.Params.TimeLimit = 3600 - (time.time() - self.start)
             max_clique = self.solver.solve(V_del, theta_hat) # Max clique in remaining graph
-            if theta_hat < len(max_clique):
+            if max_clique == "TL":
+                return
+            elif theta_hat < len(max_clique):
                 model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[i] for i in max_clique))
                 self.LC += 1
 #--------------------------------------------------------------------------------
@@ -156,35 +159,34 @@ class CIPCallback:
 
 # Function to run solver on a graph file
 #--------------------------------------------------------------------------------
-def max_clq_int(path, file, separation):
+def max_clq_int(path, file, budget, separation):
     G = a.rd(path, file, printsense=False)
     filename = file.split(".")[0]
-    return [filename] + list(solve_clq_int(G, 2, separation))
+    budget = budget if budget >= 1 else math.floor(budget * G.vcount())
+    return [filename] + list(solve_clq_int(G, budget, separation))
 #--------------------------------------------------------------------------------
 
 
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
     ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)"]
-    
-    data = []
-    print(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", "netscience.graph", 1))
-    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-    #     print(file)
-    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 1))
-    
-    # df = pd.DataFrame(data, columns = ex_col)
-    # df.to_excel(r"C:\Users\rackl\ONR-Project\MIP_statistics.xlsx", index=False)
+    sheets = []
+    budgets = [2, 0.05, 0.1]
 
+    for b in budgets:
+        dataMIP = []
+        dataIG = []
+        for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
+            print(file)
+            dataMIP.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, b, 1))
+            dataIG.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, b, 0))
+        
+        sheets.append((pd.DataFrame(dataMIP, columns = ex_col), b, "MIP"))
+        sheets.append((pd.DataFrame(dataIG, columns = ex_col), b, "IG"))
 
-    # data = []
-    # for file in os.listdir(r"C:\Users\rackl\ONR-Project\testbed\\"):
-    #     data.append(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", file, 0))
-    
-    # df = pd.DataFrame(data, columns = ex_col)
-    # df.to_excel(r"C:\Users\rackl\ONR-Project\Enum_statistics.xlsx", index=False)
-
-#G = rd("/workspaces/ONR-Project/testbed/", "power.graph")
+    with pd.ExcelWriter(r"C:\Users\rackl\ONR-Project\clq_int_statistics.xlsx") as writer:
+        for df, b, solver in sheets:
+            df.to_excel(writer, sheet_name = solver + ", b = " + str(b), index=False)
 
 
 '''
