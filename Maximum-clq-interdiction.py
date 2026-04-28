@@ -45,7 +45,7 @@ def solve_clq_int(graph, budget, separation):
         u_int = [i for i in z if z[i].getAttr(GRB.Attr.X) > 0.5] if m.SolCount > 0 else []
         #u_del = [i for i in x if x[i].getAttr(GRB.Attr.X) > 0.5]
         obj = m.ObjVal if m.SolCount > 0 else -1
-        return len(u_int), obj, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time
+        return len(u_int), obj, m.NodeCount, cb.CB, cb.LC, total_t, cb.CB_time, m.Status
 #--------------------------------------------------------------------------------
 
 
@@ -125,10 +125,13 @@ class CIPCallback:
                 self.CB_time += time.time() - t0
             except Exception:
                 model.terminate()
+                import traceback
+                print(f"Error: {Exception}")
+                print(traceback.format_exc())
     
     def restrict_clique(self, model):
         # Callback solution
-        theta_hat = model.cbGetSolution(self.theta)
+        theta_hat = math.ceil(model.cbGetSolution(self.theta))
         x_hat = model.cbGetSolution(self.x)
         
         if self.solver == "enum":
@@ -139,7 +142,9 @@ class CIPCallback:
 
             # Enumerate maximal cliques
             cliques = G_int.maximal_cliques()
-            max_clique = max(cliques, key=len)
+            max_clique = max(cliques, key=len) if len(cliques) > 0 else []
+            # clique = G_int.cliques(min = theta_hat + 1, max_results = 1)
+            # max_clique = clique[0] if len(clique) > 0 else []
             if theta_hat < len(max_clique):
                 model.cbLazy(self.theta >= len(max_clique) - gp.quicksum(self.x[G_int.vs[i]["name"]] for i in max_clique))
                 self.LC += 1
@@ -162,16 +167,18 @@ class CIPCallback:
 def max_clq_int(path, file, budget, separation):
     G = a.rd(path, file, printsense=False)
     filename = file.split(".")[0]
-    budget = budget if budget >= 1 else math.floor(budget * G.vcount())
+    budget = budget if budget >= 1 else math.ceil(budget * G.vcount())
     return [filename] + list(solve_clq_int(G, budget, separation))
 #--------------------------------------------------------------------------------
 
 
 #--------------------------------------------------------------------------------
 if __name__ == "__main__":
-    ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)"]
+    ex_col = ["Graph G", "z(V)", "theta", "#BC", "#CB", "#LC", "Total time (s)", "CB time (s)", "Status"]
     sheets = []
     budgets = [2, 0.05, 0.1]
+
+    # print(max_clq_int(r"C:\Users\rackl\ONR-Project\testbed\\", "football.graph", 0.05, 0))
 
     for b in budgets:
         dataMIP = []
